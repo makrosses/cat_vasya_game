@@ -1,9 +1,21 @@
 '''
-Полностью переработана архитектура. Абстрактный класс Unit остался, 
-но теперь от него наследуется только Character. В конструктор Character 
-добавляется параметр character_class (строка) и сохраняется
-как атрибут. Также в конструкторе сразу рассчитывается максимальное здоровье,
-урон и защита и сохраняются в соответствующие поля.
+Что получилось?
+-Абстрактный класс Unit с шестью характеристиками и абстрактными методами расчёта здоровья, 
+урона, защиты, а теперь ещё и список заклинаний (spells) и ману (mana).
+-Класс Character, наследующий от Unit и реализующий calculate_max_health, 
+calculate_damage и calculate_defense с помощью проверки атрибута 
+character_class (значения 'warrior', 'mage', 'hunter').
+-Метод calculate_max_mana в Character, который также опирается на character_class 
+для выбора формулы.
+-Абстрактный класс Spell с названием, уроном и стоимостью маны, 
+и хотя бы три конкретных заклинания (Fireball, IceLance, LightningBolt), 
+реализующих метод cast().
+-Методы в Unit для управления заклинаниями: add_spell(spell) и cast_spell(index),
+ с проверкой маны и вычетом стоимости.
+При создании персонажа его текущая мана автоматически устанавливается равной
+ максимальной (вызов calculate_max_mana в конструкторе).
+-Невозможность создать экземпляры абстрактных классов Unit и 
+Spell — только конкретные наследники или класс Character.
 '''
 
 from abc import ABC, abstractmethod
@@ -12,8 +24,7 @@ import math
 class Unit(ABC):
     '''
     Абстрактный класс Unit
-    '''
-    
+    '''   
     def __init__(
             self, strength: int, dexterity:int, constitution:int, 
             wisdom:int, intelligence:int, charisma:int):
@@ -23,6 +34,8 @@ class Unit(ABC):
         self.wisdom: int = wisdom
         self.intelligence: int = intelligence
         self.charisma: int = charisma
+        self.spells: list = []
+        self.mana: int = 0
 
     @abstractmethod
     def calculate_max_health(self):
@@ -42,6 +55,48 @@ class Unit(ABC):
     def calculate_defense(self):
         '''
         Метод подсчета защиты
+        '''
+        pass
+
+    def add_spell(self, spell):
+        '''
+        Добавляет заклинание в список доступных заклинаний
+        '''
+        self.spells.append(spell)
+
+    def cast_spell(self, index: int):
+        '''
+        Применяет заклинание по индексу
+        Проверяет наличие достаточного количества маны
+        '''
+        if index < 0 or index >= len(self.spells):
+            raise IndexError("Заклинание не найдено")
+        
+        spell = self.spells[index]
+        
+        if self.mana < spell.mana_cost:
+            raise ValueError(
+                f"Недостаточно маны! Требуется: {spell.mana_cost}, "
+                f"доступно: {self.mana}"
+            )
+        
+        self.mana -= spell.mana_cost
+        return spell.cast()
+    
+
+class Spell(ABC):
+    '''
+    Абстрактный класс Spell
+    '''   
+    def __init__(self, name, damage, mana_cost):
+        self.name = name
+        self.damage = damage
+        self.mana_cost = mana_cost
+
+    @abstractmethod
+    def cast(self):
+        '''
+        Абстрактный метод cast
         '''
         pass
 
@@ -72,14 +127,17 @@ class Character(Unit):
         self.max_health: int = self.calculate_max_health()
         self.damage: int = self.calculate_damage()
         self.defense: int = self.calculate_defense()
+        self.max_mana: int = self.calculate_max_mana()
+        self.spells: list = []
+        self.mana: int = self.max_mana
 
-    def calculate_max_health(self):
+    def calculate_max_health(self) -> int:
         '''
         Метод подсчета максимального здоровья
         '''
         return math.floor(self.strength / 2 + self.constitution * 10)
 
-    def calculate_damage(self):
+    def calculate_damage(self) -> int:
         '''
         Метод подсчета урона
         '''
@@ -90,7 +148,7 @@ class Character(Unit):
         elif self.character_class == "hunter":
             return math.floor(self.dexterity * 1.9 + self.strength / 3)
 
-    def calculate_defense(self):
+    def calculate_defense(self) -> int:
         '''
         Метод подсчета защиты
         '''
@@ -100,8 +158,47 @@ class Character(Unit):
             return math.floor(self.wisdom * 1.3 + self.intelligence / 6)
         elif self.character_class == "hunter":
             return math.floor(self.dexterity * 1.6 + self.constitution / 5)
-            
 
-rumka = Character(2, 2, 3, 4, 5, 6, "jfjf")
+    def calculate_max_mana(self) -> int:
+        '''
+        Метод подсчета максимальной маны в зависимости от класса персонажа
+        '''
+        if self.character_class == "warrior":
+            return math.floor(self.intelligence + self.strength // 2)
+        elif self.character_class == "mage":        
+            return math.floor(self.intelligence * 3 + self.wisdom)
+        elif self.character_class == "hunter":
+            return math.floor(self.dexterity * 1.5 + self.wisdom // 2)
 
-print(rumka.max_health)
+
+class Fireball(Spell):
+    '''
+    Заклинание огненного шара
+    '''
+    def __init__(self):
+        super().__init__(name="LightningBolt", damage=40, mana_cost=20)
+
+    def cast(self):
+        return self.damage
+
+
+class IceLance(Spell):
+    '''
+    Заклинание ледяного копья
+    '''
+    def __init__(self):
+        super().__init__(name="LightningBolt", damage=40, mana_cost=20)
+
+    def cast(self):
+        return self.damage
+
+
+class LightningBolt(Spell):
+    '''
+    Заклинание молнии
+    '''
+    def __init__(self):
+        super().__init__(name="LightningBolt", damage=40, mana_cost=20)
+
+    def cast(self):
+        return self.damage
